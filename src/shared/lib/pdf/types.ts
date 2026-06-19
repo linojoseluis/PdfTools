@@ -5,6 +5,7 @@ export type ExtractedImage = {
   width: number;
   height: number;
   source: 'embedded' | 'rendered';
+  format: 'jpeg' | 'png';
 };
 
 export type PageRangeParseResult = {

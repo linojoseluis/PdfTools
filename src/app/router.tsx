@@ -24,6 +24,11 @@ const ExtractImagesPage = lazy(() =>
     default: m.ExtractImagesPage,
   })),
 );
+const ExtractImagesDownloadPage = lazy(() =>
+  import('@/features/extract-images/ExtractImagesDownloadPage').then((m) => ({
+    default: m.ExtractImagesDownloadPage,
+  })),
+);
 const ImagesToPdfPage = lazy(() =>
   import('@/features/images-to-pdf/ImagesToPdfPage').then((m) => ({
     default: m.ImagesToPdfPage,
@@ -76,6 +81,14 @@ export function AppRouter() {
           element={
             <Suspense fallback={<PageLoader />}>
               <ExtractImagesPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="extract-images/download"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <ExtractImagesDownloadPage />
             </Suspense>
           }
         />

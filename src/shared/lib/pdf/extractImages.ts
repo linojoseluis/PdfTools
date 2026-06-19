@@ -1,15 +1,62 @@
 import { pdfjs, loadPdfDocument, renderPageToCanvas, canvasToBlob } from './pdfJsClient';
 import type { ExtractedImage } from './types';
 
-type ExtractOptions = {
+export type ImageOutputFormat = 'jpeg' | 'png';
+
+export type ExtractImageSettings = {
+  format: ImageOutputFormat;
+  dpi: number;
+  quality: number;
   includeRenderedPages?: boolean;
-  renderScale?: number;
   onProgress?: (current: number, total: number) => void;
 };
+
+type ExtractOptions = ExtractImageSettings;
+
+function getMimeType(format: ImageOutputFormat): string {
+  return format === 'jpeg' ? 'image/jpeg' : 'image/png';
+}
+
+function getFileExtension(format: ImageOutputFormat): string {
+  return format === 'jpeg' ? 'jpg' : 'png';
+}
+
+function dpiToScale(dpi: number): number {
+  return dpi / 72;
+}
+
+async function convertBlobToFormat(
+  blob: Blob,
+  format: ImageOutputFormat,
+  quality: number,
+): Promise<Blob> {
+  const bitmap = await createImageBitmap(blob);
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const context = canvas.getContext('2d');
+
+  if (!context) {
+    bitmap.close();
+    throw new Error('Não foi possível converter a imagem.');
+  }
+
+  if (format === 'jpeg') {
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  context.drawImage(bitmap, 0, 0);
+  bitmap.close();
+
+  return canvasToBlob(canvas, getMimeType(format), quality / 100);
+}
 
 async function extractEmbeddedFromPage(
   page: pdfjs.PDFPageProxy,
   pageNumber: number,
+  format: ImageOutputFormat,
+  quality: number,
 ): Promise<ExtractedImage[]> {
   const results: ExtractedImage[] = [];
   const opList = await page.getOperatorList();
@@ -73,13 +120,15 @@ async function extractEmbeddedFromPage(
       }
 
       if (blob) {
+        const converted = await convertBlobToFormat(blob, format, quality);
         results.push({
           pageNumber,
           index: index++,
-          blob,
+          blob: converted,
           width,
           height,
           source: 'embedded',
+          format,
         });
       }
     } catch {
@@ -92,14 +141,17 @@ async function extractEmbeddedFromPage(
 
 export async function extractImagesFromPdf(
   data: ArrayBuffer | Uint8Array,
-  options: ExtractOptions = {},
+  options: ExtractOptions,
 ): Promise<ExtractedImage[]> {
   const {
+    format,
+    dpi,
+    quality,
     includeRenderedPages = true,
-    renderScale = 1.5,
     onProgress,
   } = options;
 
+  const renderScale = dpiToScale(dpi);
   const doc = await loadPdfDocument(data);
   const total = doc.numPages;
   const allImages: ExtractedImage[] = [];
@@ -107,12 +159,12 @@ export async function extractImagesFromPdf(
   for (let pageNum = 1; pageNum <= total; pageNum += 1) {
     onProgress?.(pageNum, total);
     const page = await doc.getPage(pageNum);
-    const embedded = await extractEmbeddedFromPage(page, pageNum);
+    const embedded = await extractEmbeddedFromPage(page, pageNum, format, quality);
     allImages.push(...embedded);
 
     if (embedded.length === 0 && includeRenderedPages) {
       const canvas = await renderPageToCanvas(page, renderScale);
-      const blob = await canvasToBlob(canvas);
+      const blob = await canvasToBlob(canvas, getMimeType(format), quality / 100);
       allImages.push({
         pageNumber: pageNum,
         index: 0,
@@ -120,9 +172,14 @@ export async function extractImagesFromPdf(
         width: canvas.width,
         height: canvas.height,
         source: 'rendered',
+        format,
       });
     }
   }
 
   return allImages;
+}
+
+export function getImageFileExtension(format: ImageOutputFormat): string {
+  return getFileExtension(format);
 }

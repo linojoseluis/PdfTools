@@ -1,88 +1,128 @@
 import { useCallback, useState } from 'react';
-import { extractImagesFromPdf } from '@/shared/lib/pdf/extractImages';
-import type { ExtractedImage } from '@/shared/lib/pdf/types';
+import { useNavigate } from 'react-router-dom';
+import {
+  extractImagesFromPdf,
+  getImageFileExtension,
+  type ImageOutputFormat,
+} from '@/shared/lib/pdf/extractImages';
+import { createZipBytes } from '@/shared/lib/download';
 import { useAsyncTask } from '@/shared/hooks/useAsyncTask';
-import { useDownload } from '@/shared/hooks/useDownload';
 import { readFileAsArrayBuffer } from '@/shared/hooks/useFileReader';
 import { assertMaxSize, isPdfFile } from '@/shared/lib/validation';
 
-export function useExtractImages() {
-  const [fileName, setFileName] = useState('');
-  const [images, setImages] = useState<ExtractedImage[]>([]);
-  const [includeRendered, setIncludeRendered] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const task = useAsyncTask<ExtractedImage[]>();
-  const { downloadBlob, downloadZip } = useDownload();
+const DEFAULT_DPI = 144;
+const DEFAULT_QUALITY = 85;
 
-  const loadAndExtract = useCallback(
-    async (file: File) => {
+export function useExtractImages() {
+  const [pdfBuffer, setPdfBuffer] = useState<ArrayBuffer | null>(null);
+  const [fileName, setFileName] = useState('');
+  const [format, setFormat] = useState<ImageOutputFormat>('jpeg');
+  const [dpi, setDpi] = useState(DEFAULT_DPI);
+  const [quality, setQuality] = useState(DEFAULT_QUALITY);
+  const [error, setError] = useState<string | null>(null);
+  const task = useAsyncTask<void>();
+  const navigate = useNavigate();
+
+  const loadFile = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return;
+
+      const file = files[0];
       setError(null);
+
       try {
         if (!isPdfFile(file)) throw new Error('Selecione um ficheiro PDF.');
         assertMaxSize(file);
         const buffer = await readFileAsArrayBuffer(file);
+        setPdfBuffer(buffer);
         setFileName(file.name.replace(/\.pdf$/i, ''));
-
-        const result = await task.run(async (report) => {
-          return extractImagesFromPdf(buffer, {
-            includeRenderedPages: includeRendered,
-            onProgress: (current, total) => {
-              report(Math.round((current / total) * 100));
-            },
-          });
-        });
-
-        setImages(result);
-        if (result.length === 0) {
-          setError('Nenhuma imagem encontrada neste PDF.');
-        }
+        task.reset();
       } catch (err) {
-        if (err instanceof Error && !task.error) {
-          setError(err.message);
-        }
+        setError(err instanceof Error ? err.message : 'Erro ao carregar PDF.');
       }
     },
-    [includeRendered, task],
+    [task],
   );
 
-  const downloadAll = useCallback(async () => {
-    if (images.length === 0) return;
-    await downloadZip(
-      images.map((img, i) => ({
-        name: `${fileName}-p${img.pageNumber}-${img.source}-${i + 1}.png`,
-        data: img.blob,
-      })),
-      `${fileName}-images.zip`,
-    );
-  }, [images, fileName, downloadZip]);
+  const extract = useCallback(async () => {
+    if (!pdfBuffer) {
+      setError('Carregue um ficheiro PDF primeiro.');
+      return;
+    }
 
-  const downloadOne = useCallback(
-    (img: ExtractedImage, index: number) => {
-      downloadBlob(
-        img.blob,
-        `${fileName}-p${img.pageNumber}-${img.source}-${index + 1}.png`,
-      );
-    },
-    [fileName, downloadBlob],
-  );
+    if (dpi <= 0) {
+      setError('Introduza um valor de DPI válido.');
+      return;
+    }
+
+    if (quality < 1 || quality > 100) {
+      setError('A qualidade deve estar entre 1 e 100.');
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await task.run(async (report) => {
+        const images = await extractImagesFromPdf(pdfBuffer, {
+          format,
+          dpi,
+          quality,
+          onProgress: (current, total) => {
+            report(Math.round((current / total) * 80));
+          },
+        });
+
+        if (images.length === 0) {
+          throw new Error('Nenhuma imagem encontrada neste PDF.');
+        }
+
+        const extension = getImageFileExtension(format);
+        const zipBytes = await createZipBytes(
+          images.map((image, index) => ({
+            name: `${fileName}-p${image.pageNumber}-${image.source}-${index + 1}.${extension}`,
+            data: image.blob,
+          })),
+        );
+
+        report(100);
+
+        navigate('/extract-images/download', {
+          state: {
+            zipBytes,
+            filename: `${fileName}-images.zip`,
+          },
+        });
+      });
+    } catch {
+      // handled by task
+    }
+  }, [pdfBuffer, fileName, format, dpi, quality, task, navigate]);
 
   const reset = useCallback(() => {
-    setImages([]);
+    setPdfBuffer(null);
     setFileName('');
+    setFormat('jpeg');
+    setDpi(DEFAULT_DPI);
+    setQuality(DEFAULT_QUALITY);
     setError(null);
     task.reset();
   }, [task]);
 
   return {
-    images,
-    includeRendered,
+    pdfBuffer,
+    fileName,
+    format,
+    dpi,
+    quality,
     error: error ?? task.error,
     status: task.status,
     progress: task.progress,
-    setIncludeRendered,
-    loadAndExtract,
-    downloadAll,
-    downloadOne,
+    setFormat,
+    setDpi,
+    setQuality,
+    loadFile,
+    extract,
     reset,
   };
 }
