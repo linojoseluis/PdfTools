@@ -1,10 +1,10 @@
 import { Document, Page, pdfjs } from 'react-pdf';
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { pdfWorkerUrl } from '@/shared/lib/pdf/pdfJsClient';
 import 'react-pdf/dist/Page/TextLayer.css';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import { useState } from 'react';
 
-pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 type PdfPreviewProps = {
   data: Uint8Array | ArrayBuffer;

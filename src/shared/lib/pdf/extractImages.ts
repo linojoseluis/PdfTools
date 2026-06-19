@@ -159,7 +159,14 @@ export async function extractImagesFromPdf(
   for (let pageNum = 1; pageNum <= total; pageNum += 1) {
     onProgress?.(pageNum, total);
     const page = await doc.getPage(pageNum);
-    const embedded = await extractEmbeddedFromPage(page, pageNum, format, quality);
+    let embedded: ExtractedImage[] = [];
+
+    try {
+      embedded = await extractEmbeddedFromPage(page, pageNum, format, quality);
+    } catch {
+      embedded = [];
+    }
+
     allImages.push(...embedded);
 
     if (embedded.length === 0 && includeRenderedPages) {

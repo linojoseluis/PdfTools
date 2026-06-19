@@ -1,9 +1,9 @@
 import { Document, Page, pdfjs } from 'react-pdf';
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { pdfWorkerUrl } from '@/shared/lib/pdf/pdfJsClient';
 import 'react-pdf/dist/Page/TextLayer.css';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 
-pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 type PageThumbnailProps = {
   data: Uint8Array;
