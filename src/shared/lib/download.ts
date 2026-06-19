@@ -13,6 +13,13 @@ export async function saveZip(
   files: { name: string; data: Uint8Array | Blob }[],
   filename = 'archive.zip',
 ): Promise<void> {
+  const blob = await createZipBlob(files);
+  saveAs(blob, filename);
+}
+
+export async function createZipBlob(
+  files: { name: string; data: Uint8Array | Blob }[],
+): Promise<Blob> {
   const JSZip = (await import('jszip')).default;
   const zip = new JSZip();
 
@@ -20,6 +27,18 @@ export async function saveZip(
     zip.file(file.name, file.data);
   }
 
-  const blob = await zip.generateAsync({ type: 'blob' });
-  saveAs(blob, filename);
+  return zip.generateAsync({ type: 'blob' });
+}
+
+export async function createZipBytes(
+  files: { name: string; data: Uint8Array | Blob }[],
+): Promise<Uint8Array> {
+  const JSZip = (await import('jszip')).default;
+  const zip = new JSZip();
+
+  for (const file of files) {
+    zip.file(file.name, file.data);
+  }
+
+  return zip.generateAsync({ type: 'uint8array' });
 }

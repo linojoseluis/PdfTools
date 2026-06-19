@@ -14,6 +14,11 @@ const ExtractPagesPage = lazy(() =>
     default: m.ExtractPagesPage,
   })),
 );
+const ExtractPagesDownloadPage = lazy(() =>
+  import('@/features/extract-pages/ExtractPagesDownloadPage').then((m) => ({
+    default: m.ExtractPagesDownloadPage,
+  })),
+);
 const ExtractImagesPage = lazy(() =>
   import('@/features/extract-images/ExtractImagesPage').then((m) => ({
     default: m.ExtractImagesPage,
@@ -55,6 +60,14 @@ export function AppRouter() {
           element={
             <Suspense fallback={<PageLoader />}>
               <ExtractPagesPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="extract-pages/download"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <ExtractPagesDownloadPage />
             </Suspense>
           }
         />

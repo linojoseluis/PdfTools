@@ -1,157 +1,149 @@
 import { useCallback, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   extractPages,
-  splitIntoSinglePages,
-  parsePageRange,
+  getEvenPageIndices,
+  getOddPageIndices,
+  parsePageInterval,
+  parseSinglePage,
 } from '@/shared/lib/pdf/extractPages';
 import { getPageCount } from '@/shared/lib/pdf/pdfLibClient';
+import { createZipBytes } from '@/shared/lib/download';
 import { useAsyncTask } from '@/shared/hooks/useAsyncTask';
-import { useDownload } from '@/shared/hooks/useDownload';
 import { readFileAsUint8Array } from '@/shared/hooks/useFileReader';
 import { assertMaxSize, isPdfFile } from '@/shared/lib/validation';
 
-export type OutputMode = 'single' | 'zip';
+export type PageSelectionMode = 'even' | 'odd' | 'single' | 'range';
 
 export function useExtractPages() {
   const [pdfBytes, setPdfBytes] = useState<Uint8Array | null>(null);
   const [fileName, setFileName] = useState('');
   const [pageCount, setPageCount] = useState(0);
-  const [selectedPages, setSelectedPages] = useState<Set<number>>(new Set());
+  const [selectionMode, setSelectionMode] = useState<PageSelectionMode>('even');
+  const [pageNumberInput, setPageNumberInput] = useState('');
   const [rangeInput, setRangeInput] = useState('');
-  const [outputMode, setOutputMode] = useState<OutputMode>('single');
-  const [lastClicked, setLastClicked] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const task = useAsyncTask<void>();
-  const { downloadPdf, downloadZip } = useDownload();
+  const navigate = useNavigate();
 
-  const loadPdf = useCallback(async (file: File) => {
-    setError(null);
-    try {
-      if (!isPdfFile(file)) throw new Error('Selecione um ficheiro PDF.');
-      assertMaxSize(file);
-      const bytes = await readFileAsUint8Array(file);
-      const count = await getPageCount(bytes);
-      setPdfBytes(bytes);
-      setFileName(file.name.replace(/\.pdf$/i, ''));
-      setPageCount(count);
-      setSelectedPages(new Set());
-      setRangeInput('');
-      task.reset();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar PDF.');
-    }
-  }, [task]);
-
-  const togglePage = useCallback(
-    (pageNumber: number, shiftKey: boolean) => {
-      setSelectedPages((prev) => {
-        const next = new Set(prev);
-        if (shiftKey && lastClicked !== null) {
-          const start = Math.min(lastClicked, pageNumber);
-          const end = Math.max(lastClicked, pageNumber);
-          for (let p = start; p <= end; p += 1) next.add(p);
-        } else if (next.has(pageNumber)) {
-          next.delete(pageNumber);
-        } else {
-          next.add(pageNumber);
-        }
-        return next;
-      });
-      setLastClicked(pageNumber);
+  const loadPdf = useCallback(
+    async (file: File) => {
+      setError(null);
+      try {
+        if (!isPdfFile(file)) throw new Error('Selecione um ficheiro PDF.');
+        assertMaxSize(file);
+        const bytes = await readFileAsUint8Array(file);
+        const count = await getPageCount(bytes);
+        setPdfBytes(bytes);
+        setFileName(file.name.replace(/\.pdf$/i, ''));
+        setPageCount(count);
+        setPageNumberInput('');
+        setRangeInput('');
+        task.reset();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Erro ao carregar PDF.');
+      }
     },
-    [lastClicked],
+    [task],
   );
 
-  const selectAll = useCallback(() => {
-    setSelectedPages(new Set(Array.from({ length: pageCount }, (_, i) => i + 1)));
-  }, [pageCount]);
+  const loadFiles = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return;
+      await loadPdf(files[0]);
+    },
+    [loadPdf],
+  );
 
-  const selectNone = useCallback(() => {
-    setSelectedPages(new Set());
-  }, []);
-
-  const applyRange = useCallback(() => {
-    const { indices, invalidTokens } = parsePageRange(rangeInput, pageCount);
-    if (invalidTokens.length > 0) {
-      setError(`Intervalo inválido: ${invalidTokens.join(', ')}`);
-      return;
+  const resolveIndices = useCallback((): number[] => {
+    if (pageCount === 0) {
+      throw new Error('Carregue um ficheiro PDF primeiro.');
     }
-    setError(null);
-    setSelectedPages(new Set(indices.map((i) => i + 1)));
-  }, [rangeInput, pageCount]);
+
+    switch (selectionMode) {
+      case 'even':
+        return getEvenPageIndices(pageCount);
+      case 'odd':
+        return getOddPageIndices(pageCount);
+      case 'single':
+        return parseSinglePage(pageNumberInput, pageCount);
+      case 'range':
+        return parsePageInterval(rangeInput, pageCount);
+      default:
+        return [];
+    }
+  }, [selectionMode, pageCount, pageNumberInput, rangeInput]);
 
   const extract = useCallback(async () => {
-    if (!pdfBytes) return;
-    setError(null);
-
-    const indices = [...selectedPages].sort((a, b) => a - b).map((p) => p - 1);
-    if (indices.length === 0) {
-      setError('Selecione pelo menos uma página.');
+    if (!pdfBytes) {
+      setError('Carregue um ficheiro PDF primeiro.');
       return;
     }
 
+    setError(null);
+
     try {
+      const indices = resolveIndices();
+      if (indices.length === 0) {
+        setError('Não existem páginas para extrair com a opção selecionada.');
+        return;
+      }
+
       await task.run(async (report) => {
-        if (outputMode === 'single') {
-          report(50);
-          const result = await extractPages(pdfBytes, indices);
-          downloadPdf(result, `${fileName}-extracted.pdf`);
-        } else if (indices.length === pageCount) {
-          report(30);
-          const pages = await splitIntoSinglePages(pdfBytes);
-          report(80);
-          await downloadZip(
-            pages.map((p) => ({
-              name: `${fileName}-page-${p.pageNumber}.pdf`,
-              data: p.bytes,
-            })),
-            `${fileName}-pages.zip`,
-          );
-        } else {
-          report(20);
-          const files: { name: string; data: Uint8Array }[] = [];
-          let done = 0;
-          for (const index of indices) {
-            const bytes = await extractPages(pdfBytes, [index]);
-            files.push({ name: `${fileName}-page-${index + 1}.pdf`, data: bytes });
-            done += 1;
-            report(20 + (done / indices.length) * 70);
-          }
-          await downloadZip(files, `${fileName}-pages.zip`);
+        const files: { name: string; data: Uint8Array }[] = [];
+
+        for (let index = 0; index < indices.length; index += 1) {
+          const pageIndex = indices[index];
+          const bytes = await extractPages(pdfBytes, [pageIndex]);
+          files.push({
+            name: `${fileName}-page-${pageIndex + 1}.pdf`,
+            data: bytes,
+          });
+          report(((index + 1) / indices.length) * 90);
         }
+
+        const zipBytes = await createZipBytes(files);
         report(100);
+
+        navigate('/extract-pages/download', {
+          state: {
+            zipBytes,
+            filename: `${fileName}-pages.zip`,
+          },
+        });
       });
-    } catch {
-      // handled by task
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      }
     }
-  }, [pdfBytes, selectedPages, outputMode, fileName, pageCount, task, downloadPdf, downloadZip]);
+  }, [pdfBytes, fileName, resolveIndices, task, navigate]);
 
   const reset = useCallback(() => {
     setPdfBytes(null);
     setFileName('');
     setPageCount(0);
-    setSelectedPages(new Set());
+    setPageNumberInput('');
     setRangeInput('');
+    setSelectionMode('even');
     setError(null);
     task.reset();
   }, [task]);
 
   return {
     pdfBytes,
+    fileName,
     pageCount,
-    selectedPages,
+    selectionMode,
+    pageNumberInput,
     rangeInput,
-    outputMode,
     error: error ?? task.error,
     status: task.status,
     progress: task.progress,
-    loadPdf,
-    togglePage,
-    selectAll,
-    selectNone,
-    applyRange,
+    loadFiles,
+    setSelectionMode,
+    setPageNumberInput,
     setRangeInput,
-    setOutputMode,
     extract,
     reset,
   };

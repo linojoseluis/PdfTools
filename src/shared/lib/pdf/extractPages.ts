@@ -86,3 +86,43 @@ export function parsePageRange(input: string, pageCount: number): {
     invalidTokens,
   };
 }
+
+export function getEvenPageIndices(pageCount: number): number[] {
+  return Array.from({ length: pageCount }, (_, index) => index).filter(
+    (index) => (index + 1) % 2 === 0,
+  );
+}
+
+export function getOddPageIndices(pageCount: number): number[] {
+  return Array.from({ length: pageCount }, (_, index) => index).filter(
+    (index) => (index + 1) % 2 === 1,
+  );
+}
+
+export function parsePageInterval(input: string, pageCount: number): number[] {
+  const trimmed = input.trim();
+  const match = trimmed.match(/^(\d+)\s*-\s*(\d+)$/);
+
+  if (!match) {
+    throw new Error('Introduza o intervalo no formato "página início-página fim".');
+  }
+
+  const start = Number(match[1]);
+  const end = Number(match[2]);
+
+  if (start > end || start < 1 || end > pageCount) {
+    throw new Error(`Intervalo inválido. Use páginas entre 1 e ${pageCount}.`);
+  }
+
+  return Array.from({ length: end - start + 1 }, (_, index) => start - 1 + index);
+}
+
+export function parseSinglePage(input: string, pageCount: number): number[] {
+  const page = Number(input.trim());
+
+  if (!Number.isInteger(page) || page < 1 || page > pageCount) {
+    throw new Error(`Introduza um número de página válido (1-${pageCount}).`);
+  }
+
+  return [page - 1];
+}
