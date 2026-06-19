@@ -6,6 +6,9 @@ import { HomePage } from '@/pages/HomePage';
 const MergePage = lazy(() =>
   import('@/features/merge/MergePage').then((m) => ({ default: m.MergePage })),
 );
+const MergeDownloadPage = lazy(() =>
+  import('@/features/merge/MergeDownloadPage').then((m) => ({ default: m.MergeDownloadPage })),
+);
 const ExtractPagesPage = lazy(() =>
   import('@/features/extract-pages/ExtractPagesPage').then((m) => ({
     default: m.ExtractPagesPage,
@@ -36,6 +39,14 @@ export function AppRouter() {
           element={
             <Suspense fallback={<PageLoader />}>
               <MergePage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="merge/download"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <MergeDownloadPage />
             </Suspense>
           }
         />

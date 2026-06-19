@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { mergePdfs } from '@/shared/lib/pdf/mergePdf';
 import { getPageCount } from '@/shared/lib/pdf/pdfLibClient';
 import { useAsyncTask } from '@/shared/hooks/useAsyncTask';
-import { useDownload } from '@/shared/hooks/useDownload';
 import { readFileAsUint8Array } from '@/shared/hooks/useFileReader';
 import { assertMaxSize, isPdfFile } from '@/shared/lib/validation';
 import type { PdfFileItem } from '@/shared/types';
@@ -15,7 +15,7 @@ export function useMergePdf() {
   const [files, setFiles] = useState<PdfFileItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const task = useAsyncTask<Uint8Array>();
-  const { downloadPdf } = useDownload();
+  const navigate = useNavigate();
 
   const addFiles = useCallback(async (incoming: File[]) => {
     setError(null);
@@ -53,14 +53,21 @@ export function useMergePdf() {
   }, []);
 
   const merge = useCallback(async () => {
+    if (files.length === 0) {
+      setError('Adicione pelo menos um ficheiro PDF.');
+      return;
+    }
+
     setError(null);
     try {
       const result = await task.run(async () => mergePdfs(files.map((f) => f.bytes)));
-      downloadPdf(result, 'merged.pdf');
+      navigate('/merge/download', {
+        state: { pdfBytes: result, filename: 'merged.pdf' },
+      });
     } catch {
       // handled by task
     }
-  }, [files, task, downloadPdf]);
+  }, [files, task, navigate]);
 
   const reset = useCallback(() => {
     setFiles([]);

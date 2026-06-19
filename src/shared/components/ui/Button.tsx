@@ -2,7 +2,7 @@ import { clsx } from 'clsx';
 import type { ButtonHTMLAttributes } from 'react';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'orange' | 'green' | 'blue';
   size?: 'sm' | 'md' | 'lg';
 };
 
@@ -11,6 +11,9 @@ const variants = {
   secondary: 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50',
   ghost: 'bg-transparent text-slate-600 hover:bg-slate-100',
   danger: 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100',
+  orange: 'bg-orange-500 text-white hover:bg-orange-600 disabled:bg-orange-300',
+  green: 'bg-green-600 text-white hover:bg-green-700 disabled:bg-green-300',
+  blue: 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300',
 };
 
 const sizes = {
