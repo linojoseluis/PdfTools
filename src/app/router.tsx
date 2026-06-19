@@ -34,6 +34,11 @@ const ImagesToPdfPage = lazy(() =>
     default: m.ImagesToPdfPage,
   })),
 );
+const ImagesToPdfDownloadPage = lazy(() =>
+  import('@/features/images-to-pdf/ImagesToPdfDownloadPage').then((m) => ({
+    default: m.ImagesToPdfDownloadPage,
+  })),
+);
 
 function PageLoader() {
   return <p className="text-center text-slate-500">A carregar…</p>;
@@ -97,6 +102,14 @@ export function AppRouter() {
           element={
             <Suspense fallback={<PageLoader />}>
               <ImagesToPdfPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="images-to-pdf/download"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <ImagesToPdfDownloadPage />
             </Suspense>
           }
         />

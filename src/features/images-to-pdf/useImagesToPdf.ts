@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { imagesToPdf } from '@/shared/lib/pdf/imagesToPdf';
 import { useAsyncTask } from '@/shared/hooks/useAsyncTask';
-import { useDownload } from '@/shared/hooks/useDownload';
 import { readFileAsUint8Array } from '@/shared/hooks/useFileReader';
 import { assertMaxSize, isImageFile } from '@/shared/lib/validation';
 import type { ImageFileItem } from '@/shared/types';
@@ -14,7 +14,7 @@ export function useImagesToPdf() {
   const [images, setImages] = useState<ImageFileItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const task = useAsyncTask<Uint8Array>();
-  const { downloadPdf } = useDownload();
+  const navigate = useNavigate();
 
   const addImages = useCallback(async (files: File[]) => {
     setError(null);
@@ -61,16 +61,24 @@ export function useImagesToPdf() {
   }, []);
 
   const convert = useCallback(async () => {
+    if (images.length === 0) {
+      setError('Adicione pelo menos uma imagem.');
+      return;
+    }
+
     setError(null);
     try {
       const result = await task.run(async () => {
         return imagesToPdf(images.map((img) => ({ bytes: img.bytes, mime: img.mime })));
       });
-      downloadPdf(result, 'images.pdf');
+
+      navigate('/images-to-pdf/download', {
+        state: { pdfBytes: result, filename: 'images.pdf' },
+      });
     } catch {
       // error handled by task state
     }
-  }, [images, task, downloadPdf]);
+  }, [images, task, navigate]);
 
   const reset = useCallback(() => {
     images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
